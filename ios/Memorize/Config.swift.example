@@ -1,0 +1,9 @@
+import Foundation
+
+struct Config {
+    // Replace with your Yandex GPT API key
+    static let yandexAPIKey = "YOUR_YANDEX_API_KEY"
+    // Replace with your Yandex Folder ID
+    static let yandexFolderId = "YOUR_FOLDER_ID"
+}
+

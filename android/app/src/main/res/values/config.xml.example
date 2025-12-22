@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Replace with your Yandex GPT API key -->
+    <string name="yandex_api_key">YOUR_YANDEX_API_KEY</string>
+    <!-- Replace with your Yandex Folder ID -->
+    <string name="yandex_folder_id">YOUR_FOLDER_ID</string>
+</resources>
+
