@@ -13,6 +13,9 @@ import kotlinx.coroutines.launch
 
 data class LearningUiState(
     val currentPhraseText: String = "",
+    val displayedText: String = "",
+    val userSpokenText: String = "",
+    val isSpeaking: Boolean = false,
     val isListening: Boolean = false,
     val feedback: String? = null,
     val isCorrect: Boolean = false,
@@ -22,7 +25,11 @@ data class LearningUiState(
     val currentParagraph: Int = 0,
     val totalParagraphs: Int = 0,
     val currentPhrase: Int = 0,
-    val totalPhrases: Int = 0
+    val totalPhrases: Int = 0,
+    val audioLevel: Float = 0f,
+    val currentPhase: com.memorize.learning.LearningPhase = com.memorize.learning.LearningPhase.PASS1,
+    val showPass2Instruction: Boolean = false,
+    val pass2InstructionText: String = ""
 )
 
 class LearningViewModel(
@@ -65,9 +72,20 @@ class LearningViewModel(
         }
     }
     
+    fun startPass2AfterInstruction() {
+        viewModelScope.launch {
+            learningController.startPass2AfterInstruction { state ->
+                _uiState.value = convertState(state)
+            }
+        }
+    }
+    
     private fun convertState(state: LearningState): LearningUiState {
         return LearningUiState(
             currentPhraseText = state.currentPhraseText,
+            displayedText = state.displayedText,
+            userSpokenText = state.userSpokenText,
+            isSpeaking = state.isSpeaking,
             isListening = state.isListening,
             feedback = state.feedback,
             isCorrect = state.isCorrect,
@@ -77,7 +95,11 @@ class LearningViewModel(
             currentParagraph = state.currentParagraph,
             totalParagraphs = state.totalParagraphs,
             currentPhrase = state.currentPhrase,
-            totalPhrases = state.totalPhrases
+            totalPhrases = state.totalPhrases,
+            audioLevel = state.audioLevel,
+            currentPhase = state.currentPhase,
+            showPass2Instruction = state.showPass2Instruction,
+            pass2InstructionText = state.pass2InstructionText
         )
     }
 }

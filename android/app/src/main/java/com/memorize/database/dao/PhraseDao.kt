@@ -9,6 +9,9 @@ interface PhraseDao {
     @Query("SELECT * FROM phrases WHERE paragraphId = :paragraphId ORDER BY `order`")
     fun getPhrasesByParagraphId(paragraphId: String): Flow<List<PhraseEntity>>
 
+    @Query("SELECT * FROM phrases WHERE paragraphId = :paragraphId ORDER BY `order`")
+    suspend fun getPhrasesByParagraphIdOnce(paragraphId: String): List<PhraseEntity>
+
     @Query("SELECT * FROM phrases WHERE id = :id")
     suspend fun getPhraseById(id: String): PhraseEntity?
 

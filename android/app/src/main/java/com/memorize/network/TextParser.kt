@@ -15,7 +15,7 @@ object TextParser {
                 .replace("```", "")
                 .trim()
             
-            val jsonObject = JsonParser.parseString(cleanedJson).asJsonObject
+            val jsonObject = JsonParser().parse(cleanedJson).asJsonObject
             val sectionsArray = jsonObject.getAsJsonArray("sections")
             
             val sections = sectionsArray.map { sectionElement ->
@@ -26,7 +26,7 @@ object TextParser {
                     val paragraphObj = paragraphElement.asJsonObject
                     val phrasesArray = paragraphObj.getAsJsonArray("phrases")
                     
-                    val phrases = phrasesArray.map { it.asString }
+                    val phrases = phrasesArray.map { phraseElement -> phraseElement.asString }
                     ParagraphStructure(phrases)
                 }
                 

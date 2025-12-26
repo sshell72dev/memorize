@@ -1,5 +1,6 @@
 package com.memorize.network
 
+import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -30,8 +31,16 @@ class YandexGPTService(
     
     private val api: YandexGPTApi = retrofit.create(YandexGPTApi::class.java)
     
-    suspend fun getTextByTitle(title: String): String? {
-        val prompt = "Найди и верни полный текст произведения или стихотворения с названием: $title. Верни только текст без дополнительных комментариев."
+    suspend fun getTextByTitle(title: String, author: String? = null): String? {
+        // Build a clear prompt for finding the text - simplified version that worked before
+        var prompt = "Найди и верни полный текст произведения или стихотворения"
+        
+        if (!author.isNullOrBlank()) {
+            prompt += " автора $author"
+        }
+        
+        prompt += " с названием: $title"
+        prompt += ". Верни только текст без дополнительных комментариев, без названия и автора в начале."
         
         val request = YandexGPTRequest(
             modelUri = "gpt://$folderId/yandexgpt/latest",
@@ -41,22 +50,77 @@ class YandexGPTService(
             )
         )
         
-        return try {
-            val response = api.complete(
-                authorization = "Api-Key $apiKey",
-                folderId = folderId,
-                request = request
-            )
-            
-            if (response.isSuccessful) {
-                response.body()?.result?.alternatives?.firstOrNull()?.message?.text
-            } else {
-                null
+        // Retry logic - sometimes API has temporary issues
+        var lastException: Exception? = null
+        repeat(2) { attempt ->
+            try {
+                android.util.Log.d("YandexGPT", "Sending request (attempt ${attempt + 1}/2) with prompt: $prompt")
+                android.util.Log.d("YandexGPT", "Using folder ID: $folderId")
+                android.util.Log.d("YandexGPT", "API Key prefix: ${if (apiKey.length > 10) apiKey.take(10) + "..." else "INVALID"}")
+                
+                val response = api.complete(
+                    authorization = "Api-Key $apiKey",
+                    folderId = folderId,
+                    request = request
+                )
+                
+                android.util.Log.d("YandexGPT", "Response code: ${response.code()}, isSuccessful: ${response.isSuccessful}")
+                
+                if (response.isSuccessful) {
+                    val text = response.body()?.result?.alternatives?.firstOrNull()?.message?.text
+                    android.util.Log.d("YandexGPT", "Received text length: ${text?.length ?: 0}")
+                    return text
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    android.util.Log.e("YandexGPT", "Request failed: ${response.code()} - ${response.message()}")
+                    android.util.Log.e("YandexGPT", "Error body: $errorBody")
+                    
+                    // Check for specific error codes and provide helpful messages
+                    when (response.code()) {
+                        403 -> {
+                            android.util.Log.e("YandexGPT", "403 Forbidden - API key does not have access to folder $folderId")
+                            android.util.Log.e("YandexGPT", "This worked yesterday - check if API key or permissions changed")
+                        }
+                        401 -> {
+                            android.util.Log.e("YandexGPT", "401 Unauthorized - Invalid or expired API key")
+                            android.util.Log.e("YandexGPT", "Check that API key in config.xml matches the key in Yandex Cloud Console")
+                        }
+                        400 -> {
+                            android.util.Log.e("YandexGPT", "400 Bad Request - Check request format")
+                            android.util.Log.e("YandexGPT", "Request: modelUri=gpt://$folderId/yandexgpt/latest")
+                        }
+                        429 -> {
+                            android.util.Log.e("YandexGPT", "429 Too Many Requests - Rate limit exceeded, will retry")
+                            if (attempt < 1) {
+                                kotlinx.coroutines.delay(1000) // Wait 1 second before retry
+                                return@repeat
+                            }
+                        }
+                        500, 502, 503 -> {
+                            android.util.Log.e("YandexGPT", "${response.code()} Server Error - Temporary issue, will retry")
+                            if (attempt < 1) {
+                                kotlinx.coroutines.delay(1000) // Wait 1 second before retry
+                                return@repeat
+                            }
+                        }
+                    }
+                    // For non-retryable errors, return null immediately
+                    if (response.code() !in listOf(429, 500, 502, 503)) {
+                        return null
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("YandexGPT", "Exception in getTextByTitle (attempt ${attempt + 1})", e)
+                lastException = e
+                if (attempt < 1) {
+                    kotlinx.coroutines.delay(1000) // Wait 1 second before retry
+                }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
         }
+        
+        // If we get here, all attempts failed
+        lastException?.printStackTrace()
+        return null
     }
     
     suspend fun parseText(text: String): ParsedTextStructure? {
@@ -110,15 +174,3 @@ class YandexGPTService(
         }
     }
 }
-
-data class ParsedTextStructure(
-    val sections: List<SectionStructure>
-)
-
-data class SectionStructure(
-    val paragraphs: List<ParagraphStructure>
-)
-
-data class ParagraphStructure(
-    val phrases: List<String>
-)

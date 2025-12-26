@@ -59,8 +59,12 @@ class YandexGPTService {
         self.folderId = folderId
     }
     
-    func getTextByTitle(title: String) async throws -> String? {
-        let prompt = "Найди и верни полный текст произведения или стихотворения с названием: \(title). Верни только текст без дополнительных комментариев."
+    func getTextByTitle(title: String, author: String? = nil) async throws -> String? {
+        var prompt = "Найди и верни полный текст произведения или стихотворения"
+        if let author = author, !author.isEmpty {
+            prompt += " автора \(author)"
+        }
+        prompt += " с названием: \(title). Верни только текст без дополнительных комментариев, без названия и автора в начале."
         
         let request = YandexGPTRequest(
             modelUri: "gpt://\(folderId)/yandexgpt/latest",

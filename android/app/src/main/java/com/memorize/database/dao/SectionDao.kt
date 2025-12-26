@@ -9,6 +9,9 @@ interface SectionDao {
     @Query("SELECT * FROM sections WHERE textId = :textId ORDER BY `order`")
     fun getSectionsByTextId(textId: String): Flow<List<SectionEntity>>
 
+    @Query("SELECT * FROM sections WHERE textId = :textId ORDER BY `order`")
+    suspend fun getSectionsByTextIdOnce(textId: String): List<SectionEntity>
+
     @Query("SELECT * FROM sections WHERE id = :id")
     suspend fun getSectionById(id: String): SectionEntity?
 

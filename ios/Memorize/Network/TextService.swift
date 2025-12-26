@@ -20,14 +20,19 @@ class TextService {
         self.phraseRepository = PhraseRepository(database: database)
     }
     
-    func loadAndSaveText(title: String) async throws -> String? {
+    func getTextByTitle(title: String, author: String? = nil) async throws -> String? {
+        // Get text from Yandex GPT without saving
+        return try await yandexGPTService.getTextByTitle(title: title, author: author)
+    }
+    
+    func loadAndSaveText(title: String, author: String? = nil) async throws -> String? {
         // Check if text already exists
         if let existingText = textRepository.getTextById(id: title) {
             return existingText.id
         }
         
         // Get text from Yandex GPT
-        guard let fullText = try await yandexGPTService.getTextByTitle(title: title) else {
+        guard let fullText = try await yandexGPTService.getTextByTitle(title: title, author: author) else {
             return nil
         }
         

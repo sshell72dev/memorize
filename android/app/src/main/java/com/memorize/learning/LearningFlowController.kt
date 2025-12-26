@@ -25,10 +25,10 @@ class LearningFlowController(
     private val onComplete: (String) -> Unit
 ) {
     private val scope = CoroutineScope(Dispatchers.Main)
-    private val pass1Controller = Pass1Controller(context, scope)
-    private val pass2Controller = Pass2Controller(context, scope)
     private val ttsManager = TextToSpeechManager(context)
     private val speechRecognition = SpeechRecognitionManager(context)
+    private val pass1Controller = Pass1Controller(context, scope, ttsManager) // Pass shared TTS
+    private val pass2Controller = Pass2Controller(context, scope, ttsManager) // Pass shared TTS
     
     private var currentPhase = LearningPhase.PASS1
     private var currentSectionIndex = 0
@@ -57,10 +57,25 @@ class LearningFlowController(
         
         loadCurrentParagraph()
         
-        // Initialize speech services
+        // Initialize speech services - wait for TTS to be ready
+        android.util.Log.d("LearningFlowController", "Initializing speech services")
+        
+        // Initialize TTS first and wait for completion
+        val ttsInitDeferred = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        ttsManager.initialize { success ->
+            android.util.Log.d("LearningFlowController", "TTS manager initialized: $success")
+            ttsInitDeferred.complete(success)
+        }
+        val ttsInitSuccess = ttsInitDeferred.await()
+        android.util.Log.d("LearningFlowController", "TTS initialization completed: $ttsInitSuccess")
+        
+        // Initialize speech recognition
+        val speechInitSuccess = speechRecognition.initialize()
+        android.util.Log.d("LearningFlowController", "Speech recognition initialized: $speechInitSuccess")
+        
+        // Initialize Pass1Controller and Pass2Controller (which will use already initialized services)
         pass1Controller.initialize()
-        ttsManager.initialize { }
-        speechRecognition.initialize()
+        pass2Controller.initialize()
         
         // Create learning session
         sessionId = UUID.randomUUID().toString()
@@ -73,6 +88,7 @@ class LearningFlowController(
         database.learningSessionDao().insertSession(session)
         
         // Start with first phrase
+        android.util.Log.d("LearningFlowController", "Starting first phrase")
         startPass1()
     }
     
@@ -97,86 +113,142 @@ class LearningFlowController(
         val currentPhrase = phrases[currentPhraseIndex]
         updateProgress()
         
-        pass1Controller.execute(currentPhrase) { state ->
-            onStateUpdate?.invoke(state.copy(
+        val isCorrect = pass1Controller.execute(currentPhrase) { state ->
+            val updatedState = state.copy(
                 currentSection = currentSectionIndex,
                 totalSections = sections.size,
                 currentParagraph = currentParagraphIndex,
                 totalParagraphs = paragraphs.size,
                 currentPhrase = currentPhraseIndex,
-                totalPhrases = phrases.size
-            ))
+                totalPhrases = phrases.size,
+                currentPhase = LearningPhase.PASS1
+            )
+            onStateUpdate?.invoke(updatedState)
+        }
+        
+        // Auto-continue to next phrase if correct
+        if (isCorrect) {
+            kotlinx.coroutines.delay(500) // Small delay before auto-continue
+            continueToNextInternal()
         }
     }
     
     fun onDontRemember(onStateUpdate: (LearningState) -> Unit) {
         scope.launch {
             this@LearningFlowController.onStateUpdate = onStateUpdate
-            mistakesCount++
-            repetitionsCount++
             
-            val currentPhrase = phrases[currentPhraseIndex]
-            onStateUpdate(LearningState(
-                currentPhraseText = currentPhrase.text,
-                isListening = false,
-                feedback = "Вот правильная фраза. Повторите.",
-                isCorrect = false,
-                canContinue = false
-            ))
-            
-            ttsManager.speak(currentPhrase.text)
+            when (currentPhase) {
+                LearningPhase.PASS1 -> {
+                    mistakesCount++
+                    repetitionsCount++
+                    
+                    val currentPhrase = phrases[currentPhraseIndex]
+                    onStateUpdate(LearningState(
+                        currentPhraseText = currentPhrase.text,
+                        isListening = false,
+                        feedback = "Вот правильная фраза. Повторите.",
+                        isCorrect = false,
+                        canContinue = false,
+                        currentPhase = LearningPhase.PASS1
+                    ))
+                    
+                    android.util.Log.d("LearningFlowController", "onDontRemember (PASS1): speaking phrase: ${currentPhrase.text}")
+                    val ttsSuccess = ttsManager.speak(currentPhrase.text)
+                    android.util.Log.d("LearningFlowController", "onDontRemember (PASS1): TTS completed, success: $ttsSuccess")
+                }
+                LearningPhase.PASS2 -> {
+                    // In Pass2, "Не помню" triggers help
+                    android.util.Log.d("LearningFlowController", "onDontRemember (PASS2): requesting help")
+                    pass2Controller.requestHelp()
+                }
+                else -> {
+                    // Not applicable in other phases
+                }
+            }
         }
     }
     
     fun continueToNext(onStateUpdate: (LearningState) -> Unit) {
         scope.launch {
             this@LearningFlowController.onStateUpdate = onStateUpdate
-            
-            when (currentPhase) {
-                LearningPhase.PASS1 -> {
-                    // Mark phrase as learned in pass1
-                    val currentPhrase = phrases[currentPhraseIndex]
-                    database.phraseDao().updateLearnedStatus(currentPhrase.id, true)
-                    
-                    // Move to next phrase
-                    currentPhraseIndex++
-                    repetitionsCount++
-                    
-                    if (currentPhraseIndex >= phrases.size) {
-                        // All phrases in paragraph learned in pass1, move to pass2
-                        currentPhraseIndex = 0
-                        currentPhase = LearningPhase.PASS2
-                        startPass2()
-                    } else {
-                        startPass1()
-                    }
-                }
-                LearningPhase.PASS2 -> {
-                    // Mark phrase as learned in pass2
-                    val currentPhrase = phrases[currentPhraseIndex]
-                    database.phraseDao().updateLearnedStatus(currentPhrase.id, true)
-                    
-                    // Move to next phrase
-                    currentPhraseIndex++
-                    repetitionsCount++
-                    
-                    if (currentPhraseIndex >= phrases.size) {
-                        // All phrases learned, move to cumulative review
-                        currentPhraseIndex = 0
-                        currentPhase = LearningPhase.CUMULATIVE_REVIEW
-                        startCumulativeReview()
-                    } else {
-                        startPass2()
-                    }
-                }
-                LearningPhase.CUMULATIVE_REVIEW -> {
-                    // Continue cumulative review
-                    continueCumulativeReview()
-                }
-                LearningPhase.COMPLETED -> {
-                    // Already completed
+            continueToNextInternal()
+        }
+    }
+    
+    private suspend fun continueToNextInternal() {
+        when (currentPhase) {
+            LearningPhase.PASS1 -> {
+                // Mark phrase as learned in pass1
+                val currentPhrase = phrases[currentPhraseIndex]
+                database.phraseDao().updateLearnedStatus(currentPhrase.id, true)
+                
+                // Move to next phrase
+                currentPhraseIndex++
+                repetitionsCount++
+                
+                if (currentPhraseIndex >= phrases.size) {
+                    // All phrases in paragraph learned in pass1, show instruction before pass2
+                    android.util.Log.d("LearningFlowController", "All phrases in paragraph completed in PASS1, showing Pass2 instruction")
+                    currentPhraseIndex = 0
+                    currentPhase = LearningPhase.PASS2
+                    showPass2Instruction()
+                } else {
+                    startPass1()
                 }
             }
+            LearningPhase.PASS2 -> {
+                // In Pass2, phrase is only marked as learned if it passed without errors
+                // (This is handled in startPass2 based on return value)
+                // Move to next phrase
+                currentPhraseIndex++
+                repetitionsCount++
+                
+                if (currentPhraseIndex >= phrases.size) {
+                    // All phrases in paragraph passed Pass2 without errors
+                    android.util.Log.d("LearningFlowController", "All phrases in paragraph completed in PASS2, moving to next paragraph")
+                    moveToNextParagraph()
+                } else {
+                    startPass2()
+                }
+            }
+            LearningPhase.CUMULATIVE_REVIEW -> {
+                // Continue cumulative review
+                continueCumulativeReview()
+            }
+            LearningPhase.COMPLETED -> {
+                // Already completed
+            }
+        }
+    }
+    
+    private suspend fun showPass2Instruction() {
+        if (phrases.isEmpty()) {
+            moveToNextParagraph()
+            return
+        }
+        
+        // Collect all phrases text for the instruction
+        val fullText = phrases.joinToString(" ") { it.text }
+        
+        android.util.Log.d("LearningFlowController", "Showing Pass2 instruction with text length: ${fullText.length}")
+        
+        onStateUpdate?.invoke(LearningState(
+            currentSection = currentSectionIndex,
+            totalSections = sections.size,
+            currentParagraph = currentParagraphIndex,
+            totalParagraphs = paragraphs.size,
+            currentPhrase = 0,
+            totalPhrases = phrases.size,
+            currentPhase = LearningPhase.PASS2,
+            showPass2Instruction = true,
+            pass2InstructionText = fullText
+        ))
+    }
+    
+    fun startPass2AfterInstruction(onStateUpdate: (LearningState) -> Unit) {
+        scope.launch {
+            this@LearningFlowController.onStateUpdate = onStateUpdate
+            startPass2()
         }
     }
     
@@ -186,18 +258,54 @@ class LearningFlowController(
             return
         }
         
+        // Hide instruction screen
+        onStateUpdate?.invoke(LearningState(
+            currentSection = currentSectionIndex,
+            totalSections = sections.size,
+            currentParagraph = currentParagraphIndex,
+            totalParagraphs = paragraphs.size,
+            currentPhrase = currentPhraseIndex,
+            totalPhrases = phrases.size,
+            currentPhase = LearningPhase.PASS2,
+            showPass2Instruction = false,
+            pass2InstructionText = ""
+        ))
+        
         val currentPhrase = phrases[currentPhraseIndex]
         updateProgress()
         
-        pass2Controller.execute(currentPhrase) { state ->
-            onStateUpdate?.invoke(state.copy(
-                currentSection = currentSectionIndex,
-                totalSections = sections.size,
-                currentParagraph = currentParagraphIndex,
-                totalParagraphs = paragraphs.size,
-                currentPhrase = currentPhraseIndex,
-                totalPhrases = phrases.size
-            ))
+        // Execute Pass2 - returns true if phrase passed without errors/hints
+        val passedWithoutErrors = pass2Controller.execute(
+            currentPhrase,
+            onStateUpdate = { state ->
+                onStateUpdate?.invoke(state.copy(
+                    currentSection = currentSectionIndex,
+                    totalSections = sections.size,
+                    currentParagraph = currentParagraphIndex,
+                    totalParagraphs = paragraphs.size,
+                    currentPhrase = currentPhraseIndex,
+                    totalPhrases = phrases.size,
+                    currentPhase = LearningPhase.PASS2
+                ))
+            },
+            onDontRememberRequested = {
+                // This is handled via requestHelp() method
+            }
+        )
+        
+        if (passedWithoutErrors) {
+            // Phrase passed without errors - mark as learned
+            android.util.Log.d("LearningFlowController", "Phrase passed Pass2 without errors: ${currentPhrase.text}")
+            database.phraseDao().updateLearnedStatus(currentPhrase.id, true)
+            // Auto-continue to next phrase
+            kotlinx.coroutines.delay(500)
+            continueToNextInternal()
+        } else {
+            // Phrase had errors - user needs to try again
+            android.util.Log.d("LearningFlowController", "Phrase had errors in Pass2, user will try again: ${currentPhrase.text}")
+            mistakesCount++
+            // Don't mark as learned, don't auto-continue
+            // User will need to complete the phrase without errors
         }
     }
     
@@ -347,7 +455,8 @@ class LearningFlowController(
             currentParagraph = currentParagraphIndex,
             totalParagraphs = paragraphs.size,
             currentPhrase = currentPhraseIndex,
-            totalPhrases = phrases.size
+            totalPhrases = phrases.size,
+            currentPhase = currentPhase
         ))
     }
     

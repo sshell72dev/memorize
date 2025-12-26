@@ -5,6 +5,7 @@ struct SearchView: View {
     let onTextSelected: (String) -> Void
     let onFileSelected: () -> Void
     let onTextInput: () -> Void
+    @State private var showPreview = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -13,11 +14,14 @@ struct SearchView: View {
                 .padding()
             
             TextField(
-                "Введите название текста или стихотворения",
+                "Введите название и автора (например: \"Зимнее утро Пушкин\" или \"автор: Пушкин Зимнее утро\")",
                 text: $viewModel.searchQuery
             )
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .padding(.horizontal)
+            .onSubmit {
+                viewModel.search()
+            }
             
             Button(action: {
                 viewModel.search()
@@ -75,6 +79,45 @@ struct SearchView: View {
             Spacer()
         }
         .padding()
+        .sheet(isPresented: $showPreview) {
+            if let foundText = viewModel.foundText {
+                NavigationStack {
+                    TextPreviewView(
+                        title: foundText.title,
+                        author: foundText.author,
+                        fullText: foundText.fullText,
+                        onApprove: {
+                            Task {
+                                do {
+                                    if let textId = try await viewModel.approveAndSave() {
+                                        await MainActor.run {
+                                            showPreview = false
+                                            onTextSelected(textId)
+                                        }
+                                    }
+                                } catch {
+                                    await MainActor.run {
+                                        viewModel.error = "Ошибка сохранения: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
+                        },
+                        onEdit: {
+                            showPreview = false
+                        },
+                        onRetry: {
+                            showPreview = false
+                            viewModel.search()
+                        }
+                    )
+                }
+            }
+        }
+        .onChange(of: viewModel.foundText) { oldValue, newValue in
+            if newValue != nil {
+                showPreview = true
+            }
+        }
     }
 }
 

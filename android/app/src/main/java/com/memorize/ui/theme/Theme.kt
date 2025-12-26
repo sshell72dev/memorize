@@ -47,7 +47,6 @@ fun MemorizeTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getWindowInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
         }
     }
 

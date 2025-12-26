@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-kapt")
+    id("com.google.devtools.ksp") version "1.9.20-1.0.14"
 }
 
 android {
@@ -37,17 +37,33 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    // Note: Java compilation is needed for Room generated classes
+    // Do not disable JavaCompile tasks
     buildFeatures {
         compose = true
     }
+    
+    // Disable JDK image generation to avoid jlink.exe errors
+    afterEvaluate {
+        tasks.configureEach {
+            if (name.contains("androidJdkImage") || name.contains("JdkImage") || name.contains("jlink")) {
+                enabled = false
+            }
+        }
+    }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.3"
+        kotlinCompilerExtensionVersion = "1.5.5"
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+// KSP configuration for Room
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -68,7 +84,7 @@ dependencies {
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
-    kapt("androidx.room:room-compiler:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
     
     // Retrofit for network
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

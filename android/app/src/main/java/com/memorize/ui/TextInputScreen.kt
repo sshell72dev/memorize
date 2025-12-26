@@ -15,9 +15,21 @@ import com.memorize.ui.viewmodel.TextInputViewModel
 fun TextInputScreen(
     onTextSaved: (String) -> Unit,
     onCancel: () -> Unit,
+    initialTitle: String = "",
+    initialText: String = "",
     viewModel: TextInputViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Initialize with provided values
+    LaunchedEffect(initialTitle, initialText) {
+        if (initialTitle.isNotEmpty()) {
+            viewModel.updateTitle(initialTitle)
+        }
+        if (initialText.isNotEmpty()) {
+            viewModel.updateTextContent(initialText)
+        }
+    }
     
     Column(
         modifier = Modifier

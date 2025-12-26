@@ -9,6 +9,9 @@ interface ParagraphDao {
     @Query("SELECT * FROM paragraphs WHERE sectionId = :sectionId ORDER BY `order`")
     fun getParagraphsBySectionId(sectionId: String): Flow<List<ParagraphEntity>>
 
+    @Query("SELECT * FROM paragraphs WHERE sectionId = :sectionId ORDER BY `order`")
+    suspend fun getParagraphsBySectionIdOnce(sectionId: String): List<ParagraphEntity>
+
     @Query("SELECT * FROM paragraphs WHERE id = :id")
     suspend fun getParagraphById(id: String): ParagraphEntity?
 

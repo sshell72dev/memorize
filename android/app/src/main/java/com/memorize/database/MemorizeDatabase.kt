@@ -13,7 +13,7 @@ import com.memorize.database.entity.*
         PhraseEntity::class,
         LearningSessionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class MemorizeDatabase : RoomDatabase() {
