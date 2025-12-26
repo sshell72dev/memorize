@@ -24,7 +24,7 @@
 | **Архитектура** | MVVM, Repository Pattern, Dependency Injection |
 | **Базы данных** | Room (Android), SQLite.swift (iOS), DAO Pattern |
 | **Сетевые запросы** | Retrofit (Android), Alamofire (iOS), REST API |
-| **AI интеграция** | Yandex GPT API, DeepSeek API, обработка JSON |
+| **AI интеграция** | DeepSeek API, обработка JSON |
 | **Голосовые технологии** | Android TTS, Android Speech Recognition, AVSpeechSynthesizer, Speech Framework |
 | **Асинхронность** | Kotlin Coroutines, Async/Await (Swift) |
 | **UI/UX** | Material Design 3, адаптивный дизайн, анимации |
@@ -33,7 +33,7 @@
 
 ## ✨ Возможности
 
-- Поиск текстов через Yandex GPT API и DeepSeek API
+- Поиск текстов через AI API (DeepSeek)
 - Загрузка текста из файла (txt, и другие текстовые форматы)
 - Ввод текста вручную через интерфейс
 - Автоматическое разбиение текста на разделы, абзацы и фразы с помощью AI
@@ -73,7 +73,7 @@
 ### Android
 
 1. Откройте проект в Android Studio
-2. Добавьте ваш Yandex GPT API ключ и Folder ID в `android/config.xml`
+2. Добавьте ваш API ключ в конфигурацию (при необходимости)
 3. Соберите и запустите проект
 
 ### iOS
@@ -85,7 +85,7 @@ pod install
 ```
 
 2. Откройте `Memorize.xcworkspace` в Xcode
-3. Добавьте ваш Yandex GPT API ключ и Folder ID в `ios/Memorize/Config.swift`
+3. Добавьте ваш API ключ в конфигурацию (при необходимости)
 4. Соберите и запустите проект
 
 ## 📱 Использование
@@ -116,7 +116,7 @@ memorize/
 │   └── app/
 │       └── src/main/java/com/memorize/
 │           ├── database/     # Room database, DAO, Entities
-│           ├── network/      # Yandex GPT API, DeepSeek API, Retrofit
+│           ├── network/      # AI API (DeepSeek), Retrofit
 │           ├── speech/       # TTS и распознавание речи
 │           ├── ui/           # UI компоненты (Compose)
 │           ├── viewmodel/    # ViewModels для экранов
@@ -124,7 +124,7 @@ memorize/
 └── ios/              # iOS приложение
     └── Memorize/
         ├── Database/         # SQLite, Models, Repositories
-        ├── Network/          # Yandex GPT API, Alamofire
+        ├── Network/          # AI API, Alamofire
         ├── Speech/           # TTS и распознавание речи
         ├── Views/            # UI компоненты (SwiftUI)
         └── Learning/         # Логика обучения
